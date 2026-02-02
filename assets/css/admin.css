@@ -1,0 +1,19 @@
+.ngabs-wrap .ngabs-table td input.regular-text {
+  max-width: 220px;
+}
+.ngabs-inline-form {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0 20px;
+}
+.ngabs-template pre {
+  background: #f6f7f7;
+  padding: 12px;
+  border: 1px solid #dcdcde;
+  overflow: auto;
+}
+.ngabs-import-summary {
+  list-style: disc;
+  margin-left: 20px;
+}
