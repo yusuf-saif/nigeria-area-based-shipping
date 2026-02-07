@@ -1,7 +1,5 @@
 <?php
-if (!defined('ABSPATH')) {
-	exit;
-}
+if ( ! defined( 'ABSPATH' ) ) { exit; }
 
 class NGABS_DB {
 
@@ -14,132 +12,92 @@ class NGABS_DB {
 		self::$areas_table = $wpdb->prefix . 'ngabs_areas';
 	}
 
-	public static function tables() {
-		return array(
-			'state' => self::$state_table,
-			'areas' => self::$areas_table,
-		);
+	private static function cache_ver() {
+		$v = (int) get_option( 'ngabs_cache_ver', 1 );
+		return max( 1, $v );
+	}
+
+	private static function bump_cache_ver() {
+		update_option( 'ngabs_cache_ver', self::cache_ver() + 1, false );
 	}
 
 	public static function create_tables() {
 		global $wpdb;
-
 		self::init();
 
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+		$charset = $wpdb->get_charset_collate();
 
-		$charset_collate = $wpdb->get_charset_collate();
-
-		// We store fees as INTEGER KOBO to avoid float precision issues.
-		// 100 kobo = 1 naira.
 		$sql_state = "CREATE TABLE " . self::$state_table . " (
 			id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
 			country CHAR(2) NOT NULL DEFAULT 'NG',
 			state_code VARCHAR(10) NOT NULL,
 			default_fee_kobo BIGINT(20) NOT NULL,
-			PRIMARY KEY  (id),
+			PRIMARY KEY (id),
 			UNIQUE KEY country_state (country, state_code)
-		) $charset_collate;";
+		) $charset;";
 
 		$sql_areas = "CREATE TABLE " . self::$areas_table . " (
 			id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
 			state_code VARCHAR(10) NOT NULL,
 			area_name VARCHAR(191) NOT NULL,
 			area_fee_kobo BIGINT(20) NULL,
-			PRIMARY KEY  (id),
+			PRIMARY KEY (id),
 			UNIQUE KEY state_area (state_code, area_name),
 			KEY state_code (state_code)
-		) $charset_collate;";
+		) $charset;";
 
-		dbDelta($sql_state);
-		dbDelta($sql_areas);
-	}
+		dbDelta( $sql_state );
+		dbDelta( $sql_areas );
 
-	public static function seed_default_data() {
-		// Preload Abuja (FCT) areas. Fee is NULL to force fallback to state default unless admin sets per-area fee.
-		$fct_code = 'FC';
-		$areas = array('Wuse', 'Maitama', 'Garki', 'Asokoro', 'Jabi', 'Utako', 'Gwarinpa', 'Kubwa', 'Lugbe', 'Apo', 'Jahi', 'Kado', 'Durumi', 'Katampe', 'Life Camp');
-
-		foreach ($areas as $area) {
-			self::upsert_area($fct_code, $area, null);
+		if ( ! get_option( 'ngabs_cache_ver' ) ) {
+			add_option( 'ngabs_cache_ver', 1, '', false );
 		}
 	}
 
-	/* ---------------------------
-	 * Price parsing helpers
-	 * ---------------------------
-	 */
+	/** Price parsing (kobo integer) to avoid float rounding. */
+	public static function parse_price_to_kobo( $value ) {
+		if ( $value === null ) return null;
 
-	/**
-	 * Parse user-supplied price to integer kobo.
-	 * Accepts:
-	 *  - "1500"
-	 *  - "1500.50"
-	 *  - "1,500.50"
-	 * Returns int kobo or null if empty.
-	 * Returns WP_Error if invalid.
-	 */
-	public static function parse_price_to_kobo($value) {
-		if ($value === null) {
-			return null;
-		}
-		$value = is_string($value) ? trim($value) : $value;
+		$value = is_string( $value ) ? trim( $value ) : (string) $value;
+		if ( $value === '' ) return null;
 
-		if ($value === '' || $value === false) {
-			return null;
+		$str = str_replace( array( ',', ' ' ), '', $value );
+		if ( ! preg_match( '/^\d+(\.\d{1,2})?$/', $str ) ) {
+			return new WP_Error( 'ngabs_invalid_price', __( 'Invalid price. Use a number like 1500 or 1500.50.', 'ngabs' ) );
 		}
 
-		// Remove commas and spaces.
-		$str = is_string($value) ? str_replace(array(',', ' '), '', $value) : (string) $value;
-
-		// Strict numeric validation: digits with optional . and up to 2 decimals.
-		if (!preg_match('/^\d+(\.\d{1,2})?$/', $str)) {
-			return new WP_Error('ngabs_invalid_price', __('Invalid price. Use a number like 1500 or 1500.50.', 'ngabs'));
-		}
-
-		$parts = explode('.', $str);
+		$parts = explode( '.', $str );
 		$naira = $parts[0];
-		$dec = isset($parts[1]) ? $parts[1] : '0';
+		$dec   = isset( $parts[1] ) ? $parts[1] : '0';
 
-		if (strlen($dec) === 1) {
-			$dec .= '0';
-		}
-		if (strlen($dec) === 0) {
-			$dec = '00';
-		}
+		if ( strlen( $dec ) === 1 ) $dec .= '0';
+		if ( strlen( $dec ) === 0 ) $dec = '00';
 
-		// Build kobo as integer without floats.
-		$kobo = ((int) $naira * 100) + (int) $dec;
-		return $kobo;
+		return ( (int) $naira * 100 ) + (int) $dec;
 	}
 
-	public static function format_kobo_to_naira($kobo) {
-		$kobo = (int) $kobo;
-		$naira = floor($kobo / 100);
-		$dec = abs($kobo % 100);
-		return sprintf('%d.%02d', $naira, $dec);
+	public static function format_kobo_to_naira( $kobo ) {
+		$kobo  = (int) $kobo;
+		$naira = (int) floor( $kobo / 100 );
+		$dec   = abs( $kobo % 100 );
+		return sprintf( '%d.%02d', $naira, $dec );
 	}
 
-	/* ---------------------------
-	 * DAL methods (prepared SQL)
-	 * ---------------------------
-	 */
-
-	public static function get_state_fee_kobo($state_code) {
+	public static function get_state_fee_kobo( $state_code ) {
 		global $wpdb;
-
 		self::init();
-		$state_code = strtoupper((string) $state_code);
 
-		$cache_key = 'state_fee_' . $state_code;
-		$cached = wp_cache_get($cache_key, 'ngabs');
-		if ($cached !== false) {
-			return $cached; // may be null or int
-		}
+		$state_code = strtoupper( (string) $state_code );
+
+		$ver = self::cache_ver();
+		$key = "state_fee_{$ver}_{$state_code}";
+		$cached = wp_cache_get( $key, 'ngabs' );
+		if ( $cached !== false ) return $cached;
 
 		$row = $wpdb->get_row(
 			$wpdb->prepare(
-				"SELECT default_fee_kobo FROM " . self::$state_table . " WHERE country = %s AND state_code = %s",
+				"SELECT default_fee_kobo FROM " . self::$state_table . " WHERE country=%s AND state_code=%s",
 				'NG',
 				$state_code
 			),
@@ -147,210 +105,235 @@ class NGABS_DB {
 		);
 
 		$fee = $row ? (int) $row['default_fee_kobo'] : null;
-		wp_cache_set($cache_key, $fee, 'ngabs', 300);
+		wp_cache_set( $key, $fee, 'ngabs', 300 );
 		return $fee;
 	}
 
-	public static function set_state_fee_kobo($state_code, $fee_kobo) {
+	public static function set_state_fee_kobo( $state_code, $fee_kobo ) {
 		global $wpdb;
-
 		self::init();
-		$state_code = strtoupper((string) $state_code);
 
-		// If null, delete the row (treat as "unset").
-		if ($fee_kobo === null) {
+		$state_code = strtoupper( (string) $state_code );
+
+		if ( $fee_kobo === null ) {
 			$wpdb->delete(
 				self::$state_table,
-				array('country' => 'NG', 'state_code' => $state_code),
-				array('%s', '%s')
+				array( 'country' => 'NG', 'state_code' => $state_code ),
+				array( '%s', '%s' )
 			);
-			wp_cache_delete('state_fee_' . $state_code, 'ngabs');
+			self::bump_cache_ver();
 			return true;
 		}
 
 		$fee_kobo = (int) $fee_kobo;
 
-		// Upsert.
 		$existing = $wpdb->get_var(
 			$wpdb->prepare(
-				"SELECT id FROM " . self::$state_table . " WHERE country = %s AND state_code = %s",
+				"SELECT id FROM " . self::$state_table . " WHERE country=%s AND state_code=%s",
 				'NG',
 				$state_code
 			)
 		);
 
-		if ($existing) {
+		if ( $existing ) {
 			$wpdb->update(
 				self::$state_table,
-				array('default_fee_kobo' => $fee_kobo),
-				array('id' => (int) $existing),
-				array('%d'),
-				array('%d')
+				array( 'default_fee_kobo' => $fee_kobo ),
+				array( 'id' => (int) $existing ),
+				array( '%d' ),
+				array( '%d' )
 			);
 		} else {
 			$wpdb->insert(
 				self::$state_table,
 				array(
-					'country' => 'NG',
-					'state_code' => $state_code,
+					'country'          => 'NG',
+					'state_code'       => $state_code,
 					'default_fee_kobo' => $fee_kobo,
 				),
-				array('%s', '%s', '%d')
+				array( '%s', '%s', '%d' )
 			);
 		}
 
-		wp_cache_delete('state_fee_' . $state_code, 'ngabs');
+		self::bump_cache_ver();
 		return true;
 	}
 
-	public static function list_areas($state_code) {
+	public static function list_areas( $state_code ) {
 		global $wpdb;
-
 		self::init();
-		$state_code = strtoupper((string) $state_code);
 
-		$cache_key = 'areas_' . $state_code;
-		$cached = wp_cache_get($cache_key, 'ngabs');
-		if ($cached !== false) {
-			return $cached;
-		}
+		$state_code = strtoupper( (string) $state_code );
+
+		$ver = self::cache_ver();
+		$key = "areas_{$ver}_{$state_code}";
+		$cached = wp_cache_get( $key, 'ngabs' );
+		if ( $cached !== false ) return $cached;
 
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT id, area_name, area_fee_kobo FROM " . self::$areas_table . " WHERE state_code = %s ORDER BY area_name ASC",
+				"SELECT id, area_name, area_fee_kobo FROM " . self::$areas_table . " WHERE state_code=%s ORDER BY area_name ASC",
 				$state_code
 			),
 			ARRAY_A
 		);
 
-		foreach ($rows as &$r) {
+		foreach ( $rows as &$r ) {
 			$r['id'] = (int) $r['id'];
-			$r['area_fee_kobo'] = ($r['area_fee_kobo'] === null) ? null : (int) $r['area_fee_kobo'];
+			$r['area_fee_kobo'] = ( $r['area_fee_kobo'] === null ) ? null : (int) $r['area_fee_kobo'];
 		}
+		unset( $r );
 
-		wp_cache_set($cache_key, $rows, 'ngabs', 300);
+		wp_cache_set( $key, $rows, 'ngabs', 300 );
 		return $rows;
 	}
 
-	public static function state_has_areas($state_code) {
-		global $wpdb;
-
-		self::init();
-		$state_code = strtoupper((string) $state_code);
-
-		$cache_key = 'has_areas_' . $state_code;
-		$cached = wp_cache_get($cache_key, 'ngabs');
-		if ($cached !== false) {
-			return (bool) $cached;
-		}
-
-		$count = (int) $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT COUNT(*) FROM " . self::$areas_table . " WHERE state_code = %s",
-				$state_code
-			)
-		);
-
-		$has = $count > 0;
-		wp_cache_set($cache_key, $has ? 1 : 0, 'ngabs', 300);
-		return $has;
+	public static function state_has_areas( $state_code ) {
+		return ! empty( self::list_areas( $state_code ) );
 	}
 
-	public static function get_area_fee_kobo($state_code, $area_name) {
+	public static function get_area_fee_kobo( $state_code, $area_name ) {
 		global $wpdb;
-
 		self::init();
-		$state_code = strtoupper((string) $state_code);
-		$area_name = (string) $area_name;
 
-		$cache_key = 'area_fee_' . md5($state_code . '|' . $area_name);
-		$cached = wp_cache_get($cache_key, 'ngabs');
-		if ($cached !== false) {
-			return $cached; // may be null or int
-		}
+		$state_code = strtoupper( (string) $state_code );
+		$area_name  = (string) $area_name;
+
+		$ver = self::cache_ver();
+		$key = 'area_fee_' . $ver . '_' . md5( $state_code . '|' . $area_name );
+		$cached = wp_cache_get( $key, 'ngabs' );
+		if ( $cached !== false ) return $cached;
 
 		$row = $wpdb->get_row(
 			$wpdb->prepare(
-				"SELECT area_fee_kobo FROM " . self::$areas_table . " WHERE state_code = %s AND area_name = %s",
+				"SELECT area_fee_kobo FROM " . self::$areas_table . " WHERE state_code=%s AND area_name=%s",
 				$state_code,
 				$area_name
 			),
 			ARRAY_A
 		);
 
-		$fee = $row ? ($row['area_fee_kobo'] === null ? null : (int) $row['area_fee_kobo']) : null;
-		wp_cache_set($cache_key, $fee, 'ngabs', 300);
+		$fee = $row ? ( $row['area_fee_kobo'] === null ? null : (int) $row['area_fee_kobo'] ) : null;
+		wp_cache_set( $key, $fee, 'ngabs', 300 );
 		return $fee;
 	}
 
-	public static function upsert_area($state_code, $area_name, $fee_kobo_nullable) {
+	public static function upsert_area( $state_code, $area_name, $fee_kobo_nullable ) {
 		global $wpdb;
-
 		self::init();
-		$state_code = strtoupper((string) $state_code);
-		$area_name = trim((string) $area_name);
 
-		if ($area_name === '') {
-			return new WP_Error('ngabs_invalid_area', __('Area name is required.', 'ngabs'));
-		}
+		$state_code = strtoupper( (string) $state_code );
+		$area_name  = trim( (string) $area_name );
+		if ( $area_name === '' ) return new WP_Error( 'ngabs_invalid_area', __( 'Area name is required.', 'ngabs' ) );
+
+		$fee_val = ( $fee_kobo_nullable === null ) ? null : (int) $fee_kobo_nullable;
 
 		$existing = $wpdb->get_var(
 			$wpdb->prepare(
-				"SELECT id FROM " . self::$areas_table . " WHERE state_code = %s AND area_name = %s",
+				"SELECT id FROM " . self::$areas_table . " WHERE state_code=%s AND area_name=%s",
 				$state_code,
 				$area_name
 			)
 		);
 
-		$data = array(
-			'state_code' => $state_code,
-			'area_name'  => $area_name,
-			'area_fee_kobo' => ($fee_kobo_nullable === null) ? null : (int) $fee_kobo_nullable,
-		);
-
-		if ($existing) {
+		if ( $existing ) {
 			$wpdb->update(
 				self::$areas_table,
-				array('area_fee_kobo' => $data['area_fee_kobo']),
-				array('id' => (int) $existing),
-				array($data['area_fee_kobo'] === null ? '%s' : '%d'),
-				array('%d')
+				array( 'area_fee_kobo' => $fee_val ),
+				array( 'id' => (int) $existing ),
+				array( $fee_val === null ? '%s' : '%d' ),
+				array( '%d' )
 			);
 		} else {
 			$wpdb->insert(
 				self::$areas_table,
-				$data,
-				array('%s', '%s', $data['area_fee_kobo'] === null ? '%s' : '%d')
+				array(
+					'state_code'     => $state_code,
+					'area_name'      => $area_name,
+					'area_fee_kobo'  => $fee_val,
+				),
+				array( '%s', '%s', $fee_val === null ? '%s' : '%d' )
 			);
 		}
 
-		wp_cache_delete('areas_' . $state_code, 'ngabs');
-		wp_cache_delete('has_areas_' . $state_code, 'ngabs');
-		wp_cache_flush();
-
+		self::bump_cache_ver();
 		return true;
 	}
 
-	public static function delete_area($id) {
+	public static function get_area_by_id( $id ) {
 		global $wpdb;
-
 		self::init();
-		$id = (int) $id;
 
+		$id = (int) $id;
 		$row = $wpdb->get_row(
-			$wpdb->prepare("SELECT state_code FROM " . self::$areas_table . " WHERE id = %d", $id),
+			$wpdb->prepare(
+				"SELECT id,state_code,area_name,area_fee_kobo FROM " . self::$areas_table . " WHERE id=%d",
+				$id
+			),
 			ARRAY_A
 		);
 
-		$wpdb->delete(self::$areas_table, array('id' => $id), array('%d'));
+		if ( ! $row ) return null;
 
-		if ($row && !empty($row['state_code'])) {
-			$state_code = strtoupper($row['state_code']);
-			wp_cache_delete('areas_' . $state_code, 'ngabs');
-			wp_cache_delete('has_areas_' . $state_code, 'ngabs');
-		}
+		$row['id'] = (int) $row['id'];
+		$row['state_code'] = strtoupper( (string) $row['state_code'] );
+		$row['area_fee_kobo'] = ( $row['area_fee_kobo'] === null ) ? null : (int) $row['area_fee_kobo'];
+		return $row;
+	}
 
-		wp_cache_flush();
+	public static function update_area_by_id( $id, $state_code, $area_name, $fee_kobo_nullable ) {
+		global $wpdb;
+		self::init();
+
+		$id = (int) $id;
+		$state_code = strtoupper( (string) $state_code );
+		$area_name  = trim( (string) $area_name );
+		if ( $id <= 0 || $area_name === '' ) return new WP_Error( 'ngabs_invalid_area', __( 'Valid Area ID and name are required.', 'ngabs' ) );
+
+		$exists = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT id FROM " . self::$areas_table . " WHERE state_code=%s AND area_name=%s AND id<>%d",
+				$state_code,
+				$area_name,
+				$id
+			)
+		);
+
+		if ( $exists ) return new WP_Error( 'ngabs_duplicate_area', __( 'An area with this name already exists for that state.', 'ngabs' ) );
+
+		$fee_val = ( $fee_kobo_nullable === null ) ? null : (int) $fee_kobo_nullable;
+
+		$wpdb->update(
+			self::$areas_table,
+			array(
+				'state_code'    => $state_code,
+				'area_name'     => $area_name,
+				'area_fee_kobo' => $fee_val,
+			),
+			array( 'id' => $id ),
+			array( '%s', '%s', $fee_val === null ? '%s' : '%d' ),
+			array( '%d' )
+		);
+
+		self::bump_cache_ver();
 		return true;
+	}
+
+	public static function delete_area( $id ) {
+		global $wpdb;
+		self::init();
+
+		$wpdb->delete( self::$areas_table, array( 'id' => (int) $id ), array( '%d' ) );
+		self::bump_cache_ver();
+		return true;
+	}
+
+	public static function seed_areas_for_state( $state_code, $areas ) {
+		$state_code = strtoupper( (string) $state_code );
+		if ( ! is_array( $areas ) ) return;
+
+		foreach ( $areas as $name ) {
+			self::upsert_area( $state_code, (string) $name, null );
+		}
 	}
 }

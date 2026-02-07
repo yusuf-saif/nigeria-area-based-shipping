@@ -1,19 +1,2 @@
-.ngabs-wrap .ngabs-table td input.regular-text {
-  max-width: 220px;
-}
-.ngabs-inline-form {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 10px 0 20px;
-}
-.ngabs-template pre {
-  background: #f6f7f7;
-  padding: 12px;
-  border: 1px solid #dcdcde;
-  overflow: auto;
-}
-.ngabs-import-summary {
-  list-style: disc;
-  margin-left: 20px;
-}
+.ngabs-wrap .ngabs-card{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:16px 18px;margin-top:16px;}
+.ngabs-wrap .description{color:#667085;}
