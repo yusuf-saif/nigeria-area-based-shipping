@@ -22,6 +22,9 @@ class NGABS_Admin {
 	public static function enqueue_admin_assets( $hook ) {
 		if ( strpos( (string) $hook, self::MENU_SLUG ) === false ) return;
 		wp_enqueue_style( 'ngabs-admin', NGABS_PLUGIN_URL . 'assets/css/admin.css', array(), NGABS_VERSION );
+
+		wp_enqueue_script( 'ngabs-admin-areas', NGABS_PLUGIN_URL . 'assets/js/admin-areas.js', array( 'jquery' ), NGABS_VERSION, true );
+		wp_localize_script( 'ngabs-admin-areas', 'ngabsAdmin', array( 'confirm_delete' => __( 'Delete this area?', 'ngabs' ) ) );
 	}
 
 	public static function register_menu() {
@@ -326,7 +329,7 @@ class NGABS_Admin {
 		$errors = array();
 
 		foreach ( $fees as $code => $raw ) {
-			$code = sanitize_key( $code );
+			$code = strtoupper( sanitize_text_field( $code ) );
 			$raw  = sanitize_text_field( wp_unslash( $raw ) );
 
 			if ( $raw === '' ) {
@@ -359,7 +362,7 @@ class NGABS_Admin {
 
 	private static function render_areas() {
 		$states = NGABS_States::all();
-		$state  = isset( $_GET['state'] ) ? sanitize_key( wp_unslash( $_GET['state'] ) ) : 'FC';
+		$state = isset( $_GET['state'] ) ? strtoupper( sanitize_text_field( wp_unslash( $_GET['state'] ) ) ) : 'FC';
 		if ( ! isset( $states[ $state ] ) ) $state = 'FC';
 
 		$edit_id = isset( $_GET['edit'] ) ? absint( $_GET['edit'] ) : 0;
@@ -453,7 +456,7 @@ class NGABS_Admin {
 		if ( ! current_user_can( 'manage_woocommerce' ) ) wp_die( 'Forbidden' );
 		check_admin_referer( 'ngabs_save_area', 'ngabs_nonce' );
 
-		$state     = isset( $_POST['state_code'] ) ? sanitize_key( wp_unslash( $_POST['state_code'] ) ) : '';
+		$state = isset( $_POST['state_code'] ) ? strtoupper( sanitize_text_field( wp_unslash( $_POST['state_code'] ) ) ) : '';
 		$area_name = isset( $_POST['area_name'] ) ? sanitize_text_field( wp_unslash( $_POST['area_name'] ) ) : '';
 		$fee_raw   = isset( $_POST['area_fee'] ) ? sanitize_text_field( wp_unslash( $_POST['area_fee'] ) ) : '';
 		$area_id   = isset( $_POST['area_id'] ) ? absint( $_POST['area_id'] ) : 0;
@@ -488,7 +491,7 @@ class NGABS_Admin {
 		check_admin_referer( 'ngabs_delete_area', 'ngabs_nonce' );
 
 		$area_id = isset( $_GET['area_id'] ) ? absint( $_GET['area_id'] ) : 0;
-		$state   = isset( $_GET['state'] ) ? sanitize_key( wp_unslash( $_GET['state'] ) ) : 'FC';
+		$state = isset( $_GET['state'] ) ? strtoupper( sanitize_text_field( wp_unslash( $_GET['state'] ) ) ) : 'FC';
 
 		if ( $area_id ) NGABS_DB::delete_area( $area_id );
 

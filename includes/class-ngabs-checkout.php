@@ -36,7 +36,7 @@ class NGABS_Checkout {
 	}
 
 	public static function add_area_field( $fields ) {
-		$fields['billing']['ngabs_area'] = array(
+		$fields['billing']['billing_ngabs_area'] = array(
 			'type'     => 'select',
 			'label'    => __( 'Area', 'ngabs' ),
 			'required' => false,
@@ -58,7 +58,7 @@ class NGABS_Checkout {
 		if ( $country === '' && isset( $data['billing_country'] ) ) $country = strtoupper( (string) $data['billing_country'] );
 		if ( $state === '' && isset( $data['billing_state'] ) ) $state = strtoupper( (string) $data['billing_state'] );
 
-		$area = isset( $data['ngabs_area'] ) ? wc_clean( wp_unslash( $data['ngabs_area'] ) ) : '';
+		$area = isset( $data['billing_ngabs_area'] ) ? wc_clean( wp_unslash( $data['billing_ngabs_area'] ) ) : '';
 		$area = is_string( $area ) ? trim( $area ) : '';
 
 		if ( $country !== 'NG' ) {
@@ -86,7 +86,7 @@ class NGABS_Checkout {
 		if ( $country !== 'NG' || $state === '' ) return;
 		if ( ! NGABS_DB::state_has_areas( $state ) ) return;
 
-		$area = isset( $_POST['ngabs_area'] ) ? wc_clean( wp_unslash( $_POST['ngabs_area'] ) ) : '';
+		$area = isset( $_POST['billing_ngabs_area'] ) ? wc_clean( wp_unslash( $_POST['billing_ngabs_area'] ) ) : '';
 		$area = is_string( $area ) ? trim( $area ) : '';
 
 		if ( $area === '' ) {
@@ -112,7 +112,7 @@ class NGABS_Checkout {
 
 		if ( $country !== 'NG' || $state === '' || ! NGABS_DB::state_has_areas( $state ) ) return;
 
-		$area = isset( $_POST['ngabs_area'] ) ? wc_clean( wp_unslash( $_POST['ngabs_area'] ) ) : '';
+		$area = isset( $_POST['billing_ngabs_area'] ) ? wc_clean( wp_unslash( $_POST['billing_ngabs_area'] ) ) : '';
 		$area = is_string( $area ) ? trim( $area ) : '';
 
 		if ( $area !== '' ) {

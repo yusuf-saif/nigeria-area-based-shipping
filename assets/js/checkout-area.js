@@ -9,13 +9,13 @@ jQuery(function ($) {
 	}
 
 	function setAreaVisibility(show) {
-		var row = $('#ngabs_area').closest('.form-row');
+		var row = $('#billing_ngabs_area').closest('.form-row');
 		if (show) row.show();
 		else row.hide();
 	}
 
 	function setAreaRequired(required) {
-		var row = $('#ngabs_area').closest('.form-row');
+		var row = $('#billing_ngabs_area').closest('.form-row');
 		if (required) row.addClass('validate-required');
 		else row.removeClass('validate-required');
 	}
@@ -26,7 +26,7 @@ jQuery(function ($) {
 		if (!cs.country || cs.country.toUpperCase() !== 'NG' || !cs.state) {
 			setAreaVisibility(false);
 			setAreaRequired(false);
-			$('#ngabs_area').html('<option value="">Select an area…</option>');
+			$('#billing_ngabs_area').html('<option value="">Select an area…</option>');
 			return;
 		}
 
@@ -44,19 +44,19 @@ jQuery(function ($) {
 			if (!data.has_areas) {
 				setAreaVisibility(false);
 				setAreaRequired(false);
-				$('#ngabs_area').html('<option value="">Select an area…</option>');
+				$('#billing_ngabs_area').html('<option value="">Select an area…</option>');
 				$(document.body).trigger('update_checkout');
 				return;
 			}
 
-			var current = $('#ngabs_area').val() || '';
+			var current = $('#billing_ngabs_area').val() || '';
 			var html = '<option value="">Select an area…</option>';
 			options.forEach(function (opt) {
 				var sel = (opt.value === current) ? ' selected' : '';
 				html += '<option value="' + String(opt.value).replace(/"/g, '&quot;') + '"' + sel + '>' + opt.label + '</option>';
 			});
 
-			$('#ngabs_area').html(html);
+			$('#billing_ngabs_area').html(html);
 			setAreaVisibility(true);
 			setAreaRequired(true);
 
@@ -69,7 +69,7 @@ jQuery(function ($) {
 
 	$(document.body).on('change', '#billing_country, #billing_state, #shipping_country, #shipping_state', loadAreas);
 
-	$(document.body).on('change', '#ngabs_area', function () {
+	$(document.body).on('change', '#billing_ngabs_area', function () {
 		$(document.body).trigger('update_checkout');
 	});
 });

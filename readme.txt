@@ -4,13 +4,18 @@ Tags: woocommerce, shipping, nigeria, areas, states
 Requires at least: 6.0
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.3.3
+Stable tag: 1.3.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
 Nigeria-only WooCommerce shipping method with State + Area pricing, custom tables, admin UI, CSV import, setup wizard, and checkout recalculation.
 
 == Changelog ==
+= 1.3.4 =
+* Fixed Areas admin state switching (state codes were lowercased).
+* Added modal popup for Add/Edit Area.
+* Fixed Classic checkout Area field name/selector so it displays and persists.
+
 = 1.3.3 =
 * Fixed setup wizard crash by enabling zone method instance via settings option (no save() calls).
 

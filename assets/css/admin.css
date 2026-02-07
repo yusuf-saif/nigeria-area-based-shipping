@@ -1,2 +1,11 @@
 .ngabs-wrap .ngabs-card{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:16px 18px;margin-top:16px;}
 .ngabs-wrap .description{color:#667085;}
+
+
+
+.ngabs-modal{position:fixed;top:0;left:0;right:0;bottom:0;z-index:100000;}
+.ngabs-modal__backdrop{position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.45);}
+.ngabs-modal__dialog{position:relative;max-width:680px;margin:8vh auto;background:#fff;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.25);overflow:hidden;}
+.ngabs-modal__header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #e5e7eb;}
+.ngabs-modal__body{padding:10px 16px 16px;}
+.ngabs-modal-close{font-size:22px;line-height:1;text-decoration:none;border:none;background:none;cursor:pointer;}
