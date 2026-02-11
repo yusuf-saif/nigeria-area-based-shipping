@@ -59,13 +59,17 @@ class NGABS_Shipping_Method extends WC_Shipping_Method {
 	public function calculate_shipping( $package = array() ) {
 		$dest    = isset( $package['destination'] ) ? $package['destination'] : array();
 		$country = isset( $dest['country'] ) ? strtoupper( (string) $dest['country'] ) : '';
-		$state   = isset( $dest['state'] ) ? strtoupper( (string) $dest['state'] ) : '';
+		$raw_state = isset( $dest['state'] ) ? (string) $dest['state'] : '';
+		$state     = NGABS_States::normalize_to_code( $raw_state );
 
-		if ( $country !== 'NG' || $state === '' ) return;
+		if ( $country !== 'NG' || ! $state ) return;
 
 		$area = '';
 		if ( WC()->session ) {
+			// 'ngabs_area' is the effective area used for pricing (set by Classic or Blocks).
 			$area = (string) WC()->session->get( 'ngabs_area', '' );
+			if ( $area === '' ) { $area = (string) WC()->session->get( 'ngabs_shipping_area', '' ); }
+			if ( $area === '' ) { $area = (string) WC()->session->get( 'ngabs_billing_area', '' ); }
 		}
 
 		$fee_kobo = null;
@@ -80,10 +84,9 @@ class NGABS_Shipping_Method extends WC_Shipping_Method {
 			if ( $state_fee !== null ) $fee_kobo = (int) $state_fee;
 		}
 
-		// Safest default: no config => no rate (avoid accidental free shipping).
+		// Config missing: per requirements, return ₦0 (avoid blocking checkout).
 		if ( $fee_kobo === null ) {
-			NGABS_Admin::maybe_flag_missing_config_notice( $state );
-			return;
+			$fee_kobo = 0;
 		}
 
 		$handling_kobo = 0;

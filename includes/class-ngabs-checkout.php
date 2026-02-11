@@ -36,90 +36,112 @@ class NGABS_Checkout {
 	}
 
 	public static function add_area_field( $fields ) {
-		$fields['billing']['billing_ngabs_area'] = array(
-			'type'     => 'select',
-			'label'    => __( 'Area', 'ngabs' ),
-			'required' => false,
-			'options'  => array( '' => __( 'Select an area…', 'ngabs' ) ),
-			'priority' => 95,
-			'class'    => array( 'form-row-wide' ),
-			'clear'    => true,
-		);
-		return $fields;
-	}
+	$field = array(
+		'type'     => 'select',
+		'label'    => __( 'Area', 'ngabs' ),
+		'required' => false,
+		'class'    => array( 'form-row-wide' ),
+		'priority' => 85,
+		'options'  => array( '' => __( 'Select an area…', 'ngabs' ) ),
+		'clear'    => true,
+	);
+
+	$fields['billing']['billing_ngabs_area']   = $field;
+	$fields['shipping']['shipping_ngabs_area'] = $field;
+
+	return $fields;
+}
 
 	public static function capture_area_to_session( $posted_data ) {
-		if ( ! WC()->session ) return;
+	if ( ! WC()->session ) return;
 
-		parse_str( $posted_data, $data );
+	parse_str( (string) $posted_data, $data );
 
-		$country = isset( $data['shipping_country'] ) ? strtoupper( (string) $data['shipping_country'] ) : '';
-		$state   = isset( $data['shipping_state'] ) ? strtoupper( (string) $data['shipping_state'] ) : '';
-		if ( $country === '' && isset( $data['billing_country'] ) ) $country = strtoupper( (string) $data['billing_country'] );
-		if ( $state === '' && isset( $data['billing_state'] ) ) $state = strtoupper( (string) $data['billing_state'] );
+	$billing_country  = isset( $data['billing_country'] ) ? strtoupper( sanitize_text_field( $data['billing_country'] ) ) : '';
+	$billing_state_in = isset( $data['billing_state'] ) ? (string) $data['billing_state'] : '';
+	$billing_state    = NGABS_States::normalize_to_code( $billing_state_in ) ?: '';
+	$billing_area     = isset( $data['billing_ngabs_area'] ) ? sanitize_text_field( (string) $data['billing_ngabs_area'] ) : '';
 
-		$area = isset( $data['billing_ngabs_area'] ) ? wc_clean( wp_unslash( $data['billing_ngabs_area'] ) ) : '';
-		$area = is_string( $area ) ? trim( $area ) : '';
+	$shipping_country  = isset( $data['shipping_country'] ) ? strtoupper( sanitize_text_field( $data['shipping_country'] ) ) : '';
+	$shipping_state_in = isset( $data['shipping_state'] ) ? (string) $data['shipping_state'] : '';
+	$shipping_state    = NGABS_States::normalize_to_code( $shipping_state_in ) ?: '';
+	$shipping_area     = isset( $data['shipping_ngabs_area'] ) ? sanitize_text_field( (string) $data['shipping_ngabs_area'] ) : '';
 
-		if ( $country !== 'NG' ) {
-			WC()->session->set( 'ngabs_state', '' );
-			WC()->session->set( 'ngabs_area', '' );
-			return;
-		}
+	$ship_to_diff = ! empty( $data['ship_to_different_address'] );
 
-		WC()->session->set( 'ngabs_state', $state );
+	WC()->session->set( 'ngabs_billing_state',  $billing_country === 'NG' ? $billing_state : '' );
+	WC()->session->set( 'ngabs_billing_area',   $billing_country === 'NG' ? $billing_area  : '' );
+	WC()->session->set( 'ngabs_shipping_state', $shipping_country === 'NG' ? $shipping_state : '' );
+	WC()->session->set( 'ngabs_shipping_area',  $shipping_country === 'NG' ? $shipping_area  : '' );
 
-		if ( $state === '' || ! NGABS_DB::state_has_areas( $state ) ) {
-			WC()->session->set( 'ngabs_area', '' );
-			return;
-		}
+	$effective_country = $ship_to_diff ? $shipping_country : $billing_country;
+	$effective_state   = $ship_to_diff ? $shipping_state   : $billing_state;
+	$effective_area    = $ship_to_diff ? $shipping_area    : $billing_area;
 
-		WC()->session->set( 'ngabs_area', $area );
+	if ( $effective_country !== 'NG' ) {
+		WC()->session->set( 'ngabs_state', '' );
+		WC()->session->set( 'ngabs_area', '' );
+		return;
 	}
+
+	WC()->session->set( 'ngabs_state', $effective_state );
+
+	if ( $effective_state && NGABS_DB::state_has_areas( $effective_state ) ) {
+		WC()->session->set( 'ngabs_area', $effective_area );
+	} else {
+		WC()->session->set( 'ngabs_area', '' );
+	}
+}
 
 	public static function validate_area( $data, $errors ) {
-		$country = isset( $data['shipping_country'] ) ? strtoupper( (string) $data['shipping_country'] ) : '';
-		$state   = isset( $data['shipping_state'] ) ? strtoupper( (string) $data['shipping_state'] ) : '';
-		if ( $country === '' && isset( $data['billing_country'] ) ) $country = strtoupper( (string) $data['billing_country'] );
-		if ( $state === '' && isset( $data['billing_state'] ) ) $state = strtoupper( (string) $data['billing_state'] );
+	$ship_to_diff = ! empty( $_POST['ship_to_different_address'] ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
 
-		if ( $country !== 'NG' || $state === '' ) return;
-		if ( ! NGABS_DB::state_has_areas( $state ) ) return;
+	$effective_country  = $ship_to_diff ? ( $_POST['shipping_country'] ?? '' ) : ( $_POST['billing_country'] ?? '' ); // phpcs:ignore
+	$effective_state_in = $ship_to_diff ? ( $_POST['shipping_state'] ?? '' ) : ( $_POST['billing_state'] ?? '' ); // phpcs:ignore
+	$effective_area     = $ship_to_diff ? ( $_POST['shipping_ngabs_area'] ?? '' ) : ( $_POST['billing_ngabs_area'] ?? '' ); // phpcs:ignore
 
-		$area = isset( $_POST['billing_ngabs_area'] ) ? wc_clean( wp_unslash( $_POST['billing_ngabs_area'] ) ) : '';
-		$area = is_string( $area ) ? trim( $area ) : '';
+	$country = strtoupper( sanitize_text_field( (string) $effective_country ) );
+	$state   = NGABS_States::normalize_to_code( (string) $effective_state_in );
 
-		if ( $area === '' ) {
-			$errors->add( 'ngabs_area_required', __( 'Please select your Area for delivery.', 'ngabs' ) );
-			return;
-		}
-
-		$valid = false;
-		foreach ( NGABS_DB::list_areas( $state ) as $row ) {
-			if ( (string) $row['area_name'] === (string) $area ) { $valid = true; break; }
-		}
-
-		if ( ! $valid ) {
-			$errors->add( 'ngabs_area_invalid', __( 'Selected Area is not valid for the chosen State.', 'ngabs' ) );
+	if ( $country === 'NG' && $state && NGABS_DB::state_has_areas( $state ) ) {
+		if ( trim( sanitize_text_field( (string) $effective_area ) ) === '' ) {
+			$errors->add( 'ngabs_area_required', __( 'Please select an Area for delivery.', 'ngabs' ) );
 		}
 	}
+
+	// Billing must also be required when billing state has areas.
+	$billing_country = strtoupper( sanitize_text_field( (string) ( $_POST['billing_country'] ?? '' ) ) ); // phpcs:ignore
+	$billing_state   = NGABS_States::normalize_to_code( (string) ( $_POST['billing_state'] ?? '' ) ); // phpcs:ignore
+	$billing_area    = sanitize_text_field( (string) ( $_POST['billing_ngabs_area'] ?? '' ) ); // phpcs:ignore
+
+	if ( $billing_country === 'NG' && $billing_state && NGABS_DB::state_has_areas( $billing_state ) && trim( $billing_area ) === '' ) {
+		$errors->add( 'ngabs_billing_area_required', __( 'Please select a Billing Area.', 'ngabs' ) );
+	}
+}
 
 	public static function save_area_to_order_meta( $order, $data ) {
-		$country = isset( $data['shipping_country'] ) ? strtoupper( (string) $data['shipping_country'] ) : '';
-		$state   = isset( $data['shipping_state'] ) ? strtoupper( (string) $data['shipping_state'] ) : '';
-		if ( $country === '' && isset( $data['billing_country'] ) ) $country = strtoupper( (string) $data['billing_country'] );
-		if ( $state === '' && isset( $data['billing_state'] ) ) $state = strtoupper( (string) $data['billing_state'] );
+	$billing_area  = isset( $_POST['billing_ngabs_area'] ) ? sanitize_text_field( (string) wp_unslash( $_POST['billing_ngabs_area'] ) ) : ''; // phpcs:ignore
+	$shipping_area = isset( $_POST['shipping_ngabs_area'] ) ? sanitize_text_field( (string) wp_unslash( $_POST['shipping_ngabs_area'] ) ) : ''; // phpcs:ignore
 
-		if ( $country !== 'NG' || $state === '' || ! NGABS_DB::state_has_areas( $state ) ) return;
+	$billing_state_in  = isset( $_POST['billing_state'] ) ? (string) wp_unslash( $_POST['billing_state'] ) : ''; // phpcs:ignore
+	$shipping_state_in = isset( $_POST['shipping_state'] ) ? (string) wp_unslash( $_POST['shipping_state'] ) : ''; // phpcs:ignore
 
-		$area = isset( $_POST['billing_ngabs_area'] ) ? wc_clean( wp_unslash( $_POST['billing_ngabs_area'] ) ) : '';
-		$area = is_string( $area ) ? trim( $area ) : '';
+	$billing_state  = NGABS_States::normalize_to_code( $billing_state_in ) ?: '';
+	$shipping_state = NGABS_States::normalize_to_code( $shipping_state_in ) ?: '';
 
-		if ( $area !== '' ) {
-			$order->update_meta_data( '_ngabs_area', $area );
-			$order->update_meta_data( '_ngabs_state', $state );
-		}
+	if ( $billing_state )  $order->update_meta_data( '_ngabs_billing_state', $billing_state );
+	if ( $billing_area )   $order->update_meta_data( '_ngabs_billing_area', $billing_area );
+	if ( $shipping_state ) $order->update_meta_data( '_ngabs_shipping_state', $shipping_state );
+	if ( $shipping_area )  $order->update_meta_data( '_ngabs_shipping_area', $shipping_area );
+
+	// Back-compat: effective shipping pricing selection.
+	if ( WC()->session ) {
+		$eff_state = (string) WC()->session->get( 'ngabs_state', '' );
+		$eff_area  = (string) WC()->session->get( 'ngabs_area', '' );
+		if ( $eff_state ) $order->update_meta_data( '_ngabs_state', $eff_state );
+		if ( $eff_area )  $order->update_meta_data( '_ngabs_area', $eff_area );
 	}
+}
 
 	public static function ajax_get_areas() {
 		check_ajax_referer( 'ngabs_checkout_nonce', 'nonce' );

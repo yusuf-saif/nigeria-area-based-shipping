@@ -2,39 +2,67 @@
 jQuery(function ($) {
 	'use strict';
 
-	function getCountryState() {
-		var country = $('#shipping_country').val() || $('#billing_country').val() || '';
-		var state = $('#shipping_state').val() || $('#billing_state').val() || '';
-		return { country: country, state: state };
+	function isNigeria(country) {
+		return String(country || '').toUpperCase() === 'NG';
 	}
 
-	function setAreaVisibility(show) {
-		var row = $('#billing_ngabs_area').closest('.form-row');
-		if (show) row.show();
-		else row.hide();
+	function getSectionCountry(section) {
+		return $('#' + section + '_country').val() || '';
 	}
 
-	function setAreaRequired(required) {
-		var row = $('#billing_ngabs_area').closest('.form-row');
-		if (required) row.addClass('validate-required');
-		else row.removeClass('validate-required');
+	function getSectionState(section) {
+		return $('#' + section + '_state').val() || '';
 	}
 
-	function loadAreas() {
-		var cs = getCountryState();
+	function getSelect(section) {
+		return $('#' + section + '_ngabs_area');
+	}
 
-		if (!cs.country || cs.country.toUpperCase() !== 'NG' || !cs.state) {
-			setAreaVisibility(false);
-			setAreaRequired(false);
-			$('#billing_ngabs_area').html('<option value="">Select an area…</option>');
+	function setVisibility(section, show) {
+		var $row = getSelect(section).closest('.form-row');
+		show ? $row.show() : $row.hide();
+	}
+
+	function setRequired(section, required) {
+		var $row = getSelect(section).closest('.form-row');
+		required ? $row.addClass('validate-required') : $row.removeClass('validate-required');
+		getSelect(section).prop('required', !!required);
+	}
+
+	function setOptions(section, options, keepValue) {
+		var $sel = getSelect(section);
+		var current = keepValue ? ($sel.val() || '') : '';
+		var html = '<option value="">Select an area…</option>';
+
+		(options || []).forEach(function (opt) {
+			var v = String(opt.value || '').replace(/"/g, '&quot;');
+			var sel = (v === current) ? ' selected' : '';
+			html += '<option value="' + v + '"' + sel + '>' + opt.label + '</option>';
+		});
+
+		$sel.html(html);
+
+		if (!keepValue) {
+			$sel.val('');
+		}
+	}
+
+	function loadAreasFor(section, resetSelection) {
+		var country = getSectionCountry(section);
+		var state = getSectionState(section);
+
+		if (!isNigeria(country) || !state) {
+			setVisibility(section, false);
+			setRequired(section, false);
+			setOptions(section, [], false);
 			return;
 		}
 
 		$.post(NGABS.ajax_url, {
 			action: 'ngabs_get_areas',
 			nonce: NGABS.nonce,
-			country: cs.country,
-			state: cs.state
+			country: country,
+			state: state
 		}).done(function (resp) {
 			if (!resp || !resp.success) return;
 
@@ -42,34 +70,37 @@ jQuery(function ($) {
 			var options = data.options || [];
 
 			if (!data.has_areas) {
-				setAreaVisibility(false);
-				setAreaRequired(false);
-				$('#billing_ngabs_area').html('<option value="">Select an area…</option>');
+				setVisibility(section, false);
+				setRequired(section, false);
+				setOptions(section, [], false);
 				$(document.body).trigger('update_checkout');
 				return;
 			}
 
-			var current = $('#billing_ngabs_area').val() || '';
-			var html = '<option value="">Select an area…</option>';
-			options.forEach(function (opt) {
-				var sel = (opt.value === current) ? ' selected' : '';
-				html += '<option value="' + String(opt.value).replace(/"/g, '&quot;') + '"' + sel + '>' + opt.label + '</option>';
-			});
-
-			$('#billing_ngabs_area').html(html);
-			setAreaVisibility(true);
-			setAreaRequired(true);
+			setVisibility(section, true);
+			setRequired(section, true);
+			setOptions(section, options, !resetSelection);
 
 			$(document.body).trigger('update_checkout');
 		});
 	}
 
-	loadAreas();
-	setTimeout(loadAreas, 600);
+	function init() {
+		loadAreasFor('billing', true);
+		loadAreasFor('shipping', true);
+	}
 
-	$(document.body).on('change', '#billing_country, #billing_state, #shipping_country, #shipping_state', loadAreas);
+	init();
+	setTimeout(init, 600);
 
-	$(document.body).on('change', '#billing_ngabs_area', function () {
+	$(document.body).on('change', '#billing_country, #billing_state', function () {
+		loadAreasFor('billing', true);
+	});
+	$(document.body).on('change', '#shipping_country, #shipping_state', function () {
+		loadAreasFor('shipping', true);
+	});
+
+	$(document.body).on('change', '#billing_ngabs_area, #shipping_ngabs_area', function () {
 		$(document.body).trigger('update_checkout');
 	});
 });
