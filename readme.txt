@@ -4,13 +4,25 @@ Tags: woocommerce, shipping, nigeria, areas, states
 Requires at least: 6.0
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.3.7
+Stable tag: 1.4.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
 Nigeria-only WooCommerce shipping method with State + Area pricing, custom tables, admin UI, CSV import, setup wizard, and checkout recalculation.
 
 == Changelog ==
+= 1.4.0 =
+* Fixed Blocks field registration: use valid location "address" (shows in billing + shipping).
+* Consolidated Blocks field to single id ngabs/area.
+
+= 1.3.9 =
+* Fixed fatal error: prevent NGABS_Blocks_Integration from being declared twice.
+* Avoid early translation loading warnings by removing 'woocommerce' textdomain usage and loading plugin textdomain on init.
+
+= 1.3.8 =
+* Fixed fatal error on activation by implementing required WooCommerce Blocks IntegrationInterface methods.
+* Load plugin translations on init to avoid WP 6.7+ notice.
+
 = 1.3.7 =
 * Added Billing + Shipping Area fields for both Classic checkout and Checkout Block.
 * Fixed Blocks: Areas reload on State change, selection resets, and shipping recalculates.

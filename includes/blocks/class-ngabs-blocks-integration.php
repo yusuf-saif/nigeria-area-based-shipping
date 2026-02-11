@@ -3,6 +3,8 @@ if ( ! defined( 'ABSPATH' ) ) { exit; }
 
 use Automattic\WooCommerce\Blocks\Integrations\IntegrationInterface;
 
+if ( ! class_exists( 'NGABS_Blocks_Integration' ) ) {
+
 class NGABS_Blocks_Integration implements IntegrationInterface {
 
 	public function get_name() {
@@ -35,4 +37,6 @@ class NGABS_Blocks_Integration implements IntegrationInterface {
 	public function get_script_data() {
 		return array();
 	}
+}
+
 }

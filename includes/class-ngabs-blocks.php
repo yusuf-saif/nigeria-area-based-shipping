@@ -12,8 +12,8 @@ if ( ! defined( 'ABSPATH' ) ) { exit; }
  */
 class NGABS_Blocks {
 
-	const FIELD_BILLING_ID  = 'ngabs/billing_area';
-	const FIELD_SHIPPING_ID = 'ngabs/shipping_area';
+	const FIELD_BILLING_ID  = 'ngabs/area';
+	const FIELD_SHIPPING_ID = 'ngabs/area';
 
 	/**
 	 * Namespace used in Store API extension data.
@@ -39,7 +39,7 @@ class NGABS_Blocks {
 		woocommerce_register_additional_checkout_field( array(
 			'id'       => self::FIELD_BILLING_ID,
 			'label'    => __( 'Area', 'ngabs' ),
-			'location' => 'billing',
+			'location' => 'address',
 			'type'     => 'select',
 			'required' => false, // dynamically required via validation when the selected state has areas.
 			'options'  => array(
@@ -51,7 +51,7 @@ class NGABS_Blocks {
 		woocommerce_register_additional_checkout_field( array(
 			'id'       => self::FIELD_SHIPPING_ID,
 			'label'    => __( 'Area', 'ngabs' ),
-			'location' => 'shipping',
+			'location' => 'address',
 			'type'     => 'select',
 			'required' => false, // dynamically required via validation when the selected state has areas.
 			'options'  => array(
@@ -69,7 +69,7 @@ class NGABS_Blocks {
 			$country = strtoupper( (string) WC()->customer->get_billing_country() );
 			$state   = NGABS_States::normalize_to_code( (string) WC()->customer->get_billing_state() );
 			if ( $country === 'NG' && $state && NGABS_DB::state_has_areas( $state ) && trim( (string) $field_value ) === '' ) {
-				$errors->add( 'ngabs_billing_area_required', __( 'Please select a Billing Area.', 'ngabs' ) );
+				$errors->add( 'ngabs_area_required', __( 'Please select a Billing Area.', 'ngabs' ) );
 			}
 			return;
 		}
@@ -83,7 +83,7 @@ class NGABS_Blocks {
 			if ( $state === '' ) $state = NGABS_States::normalize_to_code( (string) WC()->customer->get_billing_state() );
 
 			if ( $country === 'NG' && $state && NGABS_DB::state_has_areas( $state ) && trim( (string) $field_value ) === '' ) {
-				$errors->add( 'ngabs_shipping_area_required', __( 'Please select an Area for delivery.', 'ngabs' ) );
+				$errors->add( 'ngabs_area_required', __( 'Please select an Area for delivery.', 'ngabs' ) );
 			}
 		}
 	}
@@ -100,23 +100,23 @@ class NGABS_Blocks {
 				$state_in = isset( $data['state'] ) ? (string) $data['state'] : '';
 				$state    = NGABS_States::normalize_to_code( $state_in ) ?: '';
 
-				$billing_area  = isset( $data['billing_area'] ) ? sanitize_text_field( (string) $data['billing_area'] ) : '';
-				$shipping_area = isset( $data['shipping_area'] ) ? sanitize_text_field( (string) $data['shipping_area'] ) : '';
+				$area  = isset( $data['area'] ) ? sanitize_text_field( (string) $data['area'] ) : '';
+				$area = isset( $data['area'] ) ? sanitize_text_field( (string) $data['area'] ) : '';
 
 				if ( $country !== 'NG' ) {
 					WC()->session->set( 'ngabs_state', '' );
 					WC()->session->set( 'ngabs_area', '' );
-					WC()->session->set( 'ngabs_billing_area', '' );
-					WC()->session->set( 'ngabs_shipping_area', '' );
+					WC()->session->set( 'ngabs_area', '' );
+					WC()->session->set( 'ngabs_area', '' );
 					return;
 				}
 
 				WC()->session->set( 'ngabs_state', $state );
-				WC()->session->set( 'ngabs_billing_area', $billing_area );
-				WC()->session->set( 'ngabs_shipping_area', $shipping_area );
+				WC()->session->set( 'ngabs_area', $area );
+				WC()->session->set( 'ngabs_area', $area );
 
 				// Effective area for pricing: shipping first, then billing.
-				$effective_area = $shipping_area !== '' ? $shipping_area : $billing_area;
+				$effective_area = $area !== '' ? $area : $area;
 
 				if ( $state === '' || ! NGABS_DB::state_has_areas( $state ) ) {
 					WC()->session->set( 'ngabs_area', '' );
@@ -173,6 +173,8 @@ class NGABS_Blocks {
 /**
  * Blocks integration wrapper used to enqueue scripts/styles on block checkout.
  */
+if ( ! class_exists( 'NGABS_Blocks_Integration' ) ) {
+
 class NGABS_Blocks_Integration implements \Automattic\WooCommerce\Blocks\Integrations\IntegrationInterface {
 
 	public function get_name() {
@@ -208,4 +210,37 @@ class NGABS_Blocks_Integration implements \Automattic\WooCommerce\Blocks\Integra
 			)
 		);
 	}
+
+/**
+ * Frontend script handles required by Blocks IntegrationInterface.
+ *
+ * @return array
+ */
+public function get_script_handles() {
+	return array( 'ngabs-blocks' );
+}
+
+/**
+ * Editor script handles required by Blocks IntegrationInterface.
+ *
+ * @return array
+ */
+public function get_editor_script_handles() {
+	return array();
+}
+
+/**
+ * Data passed to the frontend script. Blocks will expose this data to our script.
+ *
+ * @return array
+ */
+public function get_script_data() {
+	return array(
+		'namespace' => 'ngabs',
+	);
+}
+
+
+}
+
 }

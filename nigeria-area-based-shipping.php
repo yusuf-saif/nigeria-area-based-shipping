@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Nigeria Area-Based Shipping (WooCommerce)
  * Description: Nigeria-only WooCommerce shipping method that prices by State + Area, with admin UI, CSV import, setup wizard, and Classic + Checkout Block support.
- * Version:     1.3.7
+ * Version:     1.4.0
  * Author:      NGABS Team
  * Text Domain: ngabs
  * Requires at least: 6.0
@@ -15,7 +15,16 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'NGABS_VERSION', '1.3.7' );
+define( 'NGABS_VERSION', '1.4.0' );
+
+
+/**
+ * Load plugin textdomain at init (WP 6.7+ best practice).
+ */
+function ngabs_load_textdomain() {
+	load_plugin_textdomain( 'ngabs', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
+}
+add_action( 'init', 'ngabs_load_textdomain' );
 define( 'NGABS_PLUGIN_FILE', __FILE__ );
 define( 'NGABS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'NGABS_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
