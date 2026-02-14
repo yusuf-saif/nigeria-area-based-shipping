@@ -47,6 +47,14 @@ jQuery(function ($) {
 		}
 	}
 
+	function triggerUpdateCheckout(){
+		// Debounce update_checkout to avoid endless spinner loops on some themes/hosts.
+		if (triggerUpdateCheckout._t) { clearTimeout(triggerUpdateCheckout._t); }
+		triggerUpdateCheckout._t = setTimeout(function(){
+			triggerUpdateCheckout();
+		}, 120);
+	}
+
 	function loadAreasFor(section, resetSelection) {
 		var country = getSectionCountry(section);
 		var state = getSectionState(section);
@@ -73,7 +81,7 @@ jQuery(function ($) {
 				setVisibility(section, false);
 				setRequired(section, false);
 				setOptions(section, [], false);
-				$(document.body).trigger('update_checkout');
+				triggerUpdateCheckout();
 				return;
 			}
 
@@ -81,7 +89,7 @@ jQuery(function ($) {
 			setRequired(section, true);
 			setOptions(section, options, !resetSelection);
 
-			$(document.body).trigger('update_checkout');
+			triggerUpdateCheckout();
 		});
 	}
 
@@ -90,8 +98,7 @@ jQuery(function ($) {
 		loadAreasFor('shipping', true);
 	}
 
-	init();
-	setTimeout(init, 600);
+	init(); 
 
 	$(document.body).on('change', '#billing_country, #billing_state', function () {
 		loadAreasFor('billing', true);
@@ -101,6 +108,6 @@ jQuery(function ($) {
 	});
 
 	$(document.body).on('change', '#billing_ngabs_area, #shipping_ngabs_area', function () {
-		$(document.body).trigger('update_checkout');
+		triggerUpdateCheckout();
 	});
 });

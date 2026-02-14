@@ -1,35 +1,31 @@
 /* global wp, ngabsBlocksData */
 /**
- * Nigeria Area-Based Shipping — Checkout Blocks script
+ * NGABS - Checkout Block behaviour.
  *
- * Responsibilities:
- * - Detect current Country/State for billing + shipping from WC Blocks data stores.
- * - Fetch Areas for a state (REST) and populate BOTH Billing and Shipping Area selects.
- * - On state change, reset area to blank (required flow) and trigger shipping recalculation.
- * - Push selected billing_area + shipping_area to Store API extension data.
+ * - Watches country/state from Blocks data stores.
+ * - Loads areas via REST and populates the Area <select>.
+ * - Uses wc.blocksCheckout.extensionCartUpdate() to push selection to the server and trigger
+ *   shipping/total recalculation (no page refresh).
  *
- * Notes:
- * WC Blocks DOM and data stores can vary by WooCommerce version. This script is intentionally
- * defensive and uses broad selectors + store fallbacks.
+ * Design note:
+ * - We do NOT run cart updates on every DOM mutation. We only run an update when the effective
+ *   country/state changes or when the shopper changes the Area selection.
  */
 (function () {
 	'use strict';
 
-	if (!window.wp || !wp.data || !wp.apiFetch || !window.ngabsBlocksData) return;
-
-	const apiFetch = wp.apiFetch;
-	const select = wp.data.select;
-	const dispatch = wp.data.dispatch;
-
-	let prevShippingKey = '';
-	let prevBillingKey = '';
-	let optionsCache = {}; // state => { has_areas, options }
-
-	function safeUpper(v) {
-		return String(v || '').toUpperCase();
+	if (!window.wp || !window.wp.data || !window.wp.apiFetch || !window.ngabsBlocksData) {
+		return;
 	}
 
-	function getCustomerAddresses() {
+	const apiFetch = window.wp.apiFetch;
+	const select = window.wp.data.select;
+
+	let lastKey = '';
+	let cachedOptions = [{ value: '', label: 'Select an area…' }];
+	let cachedHasAreas = false;
+
+	function getAddress() {
 		try {
 			const checkoutStore = select('wc/store/checkout');
 			const cartStore = select('wc/store/cart');
@@ -49,74 +45,26 @@
 		}
 	}
 
-	function getKeys() {
-		const addr = getCustomerAddresses();
-		const shippingCountry = safeUpper(addr.shipping.country || '');
-		const shippingState = String(addr.shipping.state || '');
-		const billingCountry = safeUpper(addr.billing.country || '');
-		const billingState = String(addr.billing.state || '');
-
-		return {
-			shipping: shippingCountry + '|' + shippingState,
-			billing: billingCountry + '|' + billingState,
-			shippingCountry,
-			shippingState,
-			billingCountry,
-			billingState
-		};
+	function getCountryState() {
+		const addr = getAddress();
+		const country = String(addr.shipping.country || addr.billing.country || '').toUpperCase();
+		const state = String(addr.shipping.state || addr.billing.state || '').toUpperCase();
+		return { country, state };
 	}
 
-	async function fetchAreas(state) {
-		if (!state) return { has_areas: false, options: [{ value: '', label: 'Select an area…' }] };
-
-		if (optionsCache[state]) return optionsCache[state];
-
-		try {
-			const url = ngabsBlocksData.rest_url + '?state=' + encodeURIComponent(state);
-			const path = url.replace(window.location.origin, '');
-			const res = await apiFetch({ path });
-
-			const safe = {
-				has_areas: !!(res && res.has_areas),
-				options: (res && res.options) ? res.options : [{ value: '', label: 'Select an area…' }]
-			};
-
-			optionsCache[state] = safe;
-			return safe;
-		} catch (e) {
-			return { has_areas: false, options: [{ value: '', label: 'Select an area…' }] };
-		}
-	}
-
-	function findSelect(kind) {
-		// kind: 'billing' or 'shipping'
+	function findAreaSelects() {
 		const selectors = [
-			// Additional fields often include the id in name or id.
-			'select[name*="ngabs/' + kind + '_area"]',
-			'select[id*="ngabs"][id*="' + kind + '"]',
-			'select[name*="ngabs_' + kind + '_area"]'
+			'select[name="extensions[ngabs][area]"]',
+			'select[name="extensions%5Bngabs%5D%5Barea%5D"]',
+			'select[name*="ngabs/area"]',
+			'select[id*="ngabs"][id*="area"]',
+			'select[name*="ngabs_area"]'
 		];
-
-		for (let i = 0; i < selectors.length; i++) {
-			const el = document.querySelector(selectors[i]);
-			if (el) return el;
-		}
-		return null;
-	}
-
-	function setSelectOptions(selectEl, options, resetToBlank) {
-		const current = resetToBlank ? '' : (selectEl.value || '');
-		selectEl.innerHTML = '';
-
-		(options || []).forEach((opt) => {
-			const o = document.createElement('option');
-			o.value = opt.value;
-			o.textContent = opt.label;
-			if (o.value === current) o.selected = true;
-			selectEl.appendChild(o);
+		const nodes = [];
+		selectors.forEach((sel) => {
+			document.querySelectorAll(sel).forEach((el) => nodes.push(el));
 		});
-
-		if (resetToBlank) selectEl.value = '';
+		return Array.from(new Set(nodes));
 	}
 
 	function setVisibility(selectEl, show) {
@@ -129,103 +77,156 @@
 		selectEl.required = !!show;
 	}
 
-	function pushExtensionData(payload) {
-		// Prefer cart store (newer), then checkout store (older).
+	function setOptions(selectEl, options, reset) {
+		selectEl.innerHTML = '';
+		options.forEach((opt) => {
+			const o = document.createElement('option');
+			o.value = opt.value;
+			o.textContent = opt.label;
+			selectEl.appendChild(o);
+		});
+		if (reset) selectEl.value = '';
+	}
+
+	function applyCachedToSelect(selectEl) {
+		setVisibility(selectEl, cachedHasAreas);
+		setOptions(selectEl, cachedHasAreas ? cachedOptions : [{ value: '', label: 'Select an area…' }], false);
+	}
+
+	function processError(err) {
 		try {
-			const cartDispatch = dispatch('wc/store/cart');
-			if (cartDispatch && cartDispatch.setExtensionData) {
-				cartDispatch.setExtensionData(ngabsBlocksData.namespace, payload);
-				if (cartDispatch.calculateShipping) cartDispatch.calculateShipping();
+			if (window.wc && window.wc.wcBlocksData && typeof window.wc.wcBlocksData.processErrorResponse === 'function') {
+				window.wc.wcBlocksData.processErrorResponse(err);
 				return;
 			}
 		} catch (e) {}
-
-		try {
-			const checkoutDispatch = dispatch('wc/store/checkout');
-			if (checkoutDispatch && checkoutDispatch.setExtensionData) {
-				checkoutDispatch.setExtensionData(ngabsBlocksData.namespace, payload);
-			}
-		} catch (e) {}
+		// eslint-disable-next-line no-console
+		console.warn('NGABS Blocks update failed', err);
 	}
 
-	function bindChange(selectEl, kind, getPayload) {
-		if (selectEl.dataset.ngabsBound === '1') return;
-		selectEl.dataset.ngabsBound = '1';
+	function extensionCartUpdate(payload) {
+		try {
+			if (window.wc && window.wc.blocksCheckout && typeof window.wc.blocksCheckout.extensionCartUpdate === 'function') {
+				return window.wc.blocksCheckout.extensionCartUpdate({
+					namespace: ngabsBlocksData.namespace,
+					data: payload
+				});
+			}
+		} catch (e) {}
+		return Promise.resolve();
+	}
+
+	async function fetchAreas(state) {
+		try {
+			const url = ngabsBlocksData.rest_url + '?state=' + encodeURIComponent(state);
+			const path = url.replace(window.location.origin, '');
+			return await apiFetch({ path });
+		} catch (e) {
+			return null;
+		}
+	}
+
+	function bindChange(selectEl) {
+		if (selectEl.__ngabsBound) return;
+		selectEl.__ngabsBound = true;
 
 		selectEl.addEventListener('change', function () {
-			pushExtensionData(getPayload());
+			const cs = getCountryState();
+			const area = String(selectEl.value || '');
+			extensionCartUpdate({ country: cs.country, state: cs.state, area }).catch(processError);
 		});
 	}
 
-	async function syncOne(kind, country, state, resetSelection) {
-		const selectEl = findSelect(kind);
-		if (!selectEl) return;
+	function ensureBoundAndStyled() {
+		const selects = findAreaSelects();
+		selects.forEach((sel) => {
+			applyCachedToSelect(sel);
+			bindChange(sel);
+		});
+		return selects.length;
+	}
 
-		// Not Nigeria or empty state: hide field + clear.
-		if (safeUpper(country) !== 'NG' || !state) {
-			setVisibility(selectEl, false);
-			setSelectOptions(selectEl, [{ value: '', label: 'Select an area…' }], true);
+	async function refreshIfStateChanged() {
+		const cs = getCountryState();
+		const key = cs.country + '|' + cs.state;
+
+		// If fields aren't mounted yet, do nothing and don't advance lastKey.
+		if (findAreaSelects().length === 0) {
 			return;
 		}
 
-		const res = await fetchAreas(state);
-		setSelectOptions(selectEl, res.options, !!resetSelection);
-		setVisibility(selectEl, res.has_areas);
+		if (key === lastKey) {
+			// State hasn't changed; just make sure any newly-mounted selects have correct options/binding.
+			ensureBoundAndStyled();
+			return;
+		}
 
-		// If has areas and we just reset, force blank value.
-		if (res.has_areas && resetSelection) selectEl.value = '';
+		lastKey = key;
 
-		return;
+		// Not Nigeria or no state: hide & clear and clear server selection.
+		if (cs.country !== 'NG' || !cs.state) {
+			cachedHasAreas = false;
+			cachedOptions = [{ value: '', label: 'Select an area…' }];
+
+			findAreaSelects().forEach((sel) => {
+				setVisibility(sel, false);
+				setOptions(sel, cachedOptions, true);
+				bindChange(sel);
+			});
+
+			extensionCartUpdate({ country: cs.country, state: cs.state, area: '' }).catch(processError);
+			return;
+		}
+
+		const res = await fetchAreas(cs.state);
+		if (!res) return;
+
+		cachedHasAreas = !!res.has_areas;
+		cachedOptions = res.options || [{ value: '', label: 'Select an area…' }];
+
+		findAreaSelects().forEach((sel) => {
+			setVisibility(sel, cachedHasAreas);
+			// Required flow: reset to blank on state change.
+			setOptions(sel, cachedHasAreas ? cachedOptions : [{ value: '', label: 'Select an area…' }], true);
+			bindChange(sel);
+		});
+
+		// Clear effective area on state change to force re-select.
+		extensionCartUpdate({ country: cs.country, state: cs.state, area: '' }).catch(processError);
 	}
 
-	function currentPayload() {
-		const keys = getKeys();
-		const billingSelect = findSelect('billing');
-		const shippingSelect = findSelect('shipping');
+	// Subscribe to store changes (country/state changes trigger refresh).
+	// IMPORTANT: wp.data.subscribe fires very frequently; we debounce to avoid infinite loops
+	// where our extensionCartUpdate triggers store changes which trigger subscribe again.
+	let ngabsTimer = null;
+	let ngabsInFlight = false;
 
-		return {
-			country: (keys.shippingCountry || keys.billingCountry),
-			state: (keys.shippingState || keys.billingState),
-			billing_area: billingSelect ? String(billingSelect.value || '') : '',
-			shipping_area: shippingSelect ? String(shippingSelect.value || '') : ''
-		};
+	function scheduleRefresh() {
+		if (ngabsInFlight) return;
+		if (ngabsTimer) window.clearTimeout(ngabsTimer);
+		ngabsTimer = window.setTimeout(async function () {
+			ngabsInFlight = true;
+			try {
+				await refreshIfStateChanged();
+			} finally {
+				ngabsInFlight = false;
+			}
+		}, 150);
 	}
 
-	async function refresh() {
-		const k = getKeys();
-
-		const shippingChanged = (k.shipping !== prevShippingKey);
-		const billingChanged = (k.billing !== prevBillingKey);
-
-		// Only act when something changes.
-		if (!shippingChanged && !billingChanged) return;
-
-		prevShippingKey = k.shipping;
-		prevBillingKey = k.billing;
-
-		// Requirement: reset area when state changes.
-		await syncOne('shipping', k.shippingCountry, k.shippingState, shippingChanged);
-		await syncOne('billing', k.billingCountry, k.billingState, billingChanged);
-
-		const billingSelect = findSelect('billing');
-		const shippingSelect = findSelect('shipping');
-
-		if (billingSelect) bindChange(billingSelect, 'billing', currentPayload);
-		if (shippingSelect) bindChange(shippingSelect, 'shipping', currentPayload);
-
-		// Push immediately after refresh (so server has updated blank / new values).
-		pushExtensionData(currentPayload());
-	}
-
-	// Subscribe to store updates.
 	wp.data.subscribe(function () {
-		refresh();
+		scheduleRefresh();
 	});
 
-	// Also refresh on DOM changes (Blocks can mount fields late).
 	document.addEventListener('DOMContentLoaded', function () {
-		refresh();
-		const obs = new MutationObserver(function () { refresh(); });
+		// Initial bind in case field mounts quickly.
+		ensureBoundAndStyled();
+		refreshIfStateChanged();
+
+		// Observe for late-mounted field; we only apply cached options + bind handlers, no cart update here.
+		const obs = new MutationObserver(function () {
+			ensureBoundAndStyled();
+		});
 		obs.observe(document.body, { childList: true, subtree: true });
 	});
 })();

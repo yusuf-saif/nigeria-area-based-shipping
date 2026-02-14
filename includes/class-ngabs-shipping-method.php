@@ -62,15 +62,29 @@ class NGABS_Shipping_Method extends WC_Shipping_Method {
 		$raw_state = isset( $dest['state'] ) ? (string) $dest['state'] : '';
 		$state     = NGABS_States::normalize_to_code( $raw_state );
 
-		if ( $country !== 'NG' || ! $state ) return;
+		if ( $country !== 'NG' ) {
+			return;
+		}
+
+		// Some checkout flows may not populate the destination state consistently.
+		// Fall back to our session state if available.
+		if ( ! $state && WC()->session ) {
+			$state = NGABS_States::normalize_to_code( (string) WC()->session->get( 'ngabs_state', '' ) );
+		}
+
+		if ( ! $state ) {
+			return;
+		}
 
 		$area = '';
 		if ( WC()->session ) {
 			// 'ngabs_area' is the effective area used for pricing (set by Classic or Blocks).
-			$area = (string) WC()->session->get( 'ngabs_area', '' );
-			if ( $area === '' ) { $area = (string) WC()->session->get( 'ngabs_shipping_area', '' ); }
-			if ( $area === '' ) { $area = (string) WC()->session->get( 'ngabs_billing_area', '' ); }
+			$area = trim( (string) WC()->session->get( 'ngabs_area', '' ) );
+			if ( $area === '' ) { $area = trim( (string) WC()->session->get( 'ngabs_shipping_area', '' ) ); }
+			if ( $area === '' ) { $area = trim( (string) WC()->session->get( 'ngabs_billing_area', '' ) ); }
 		}
+
+				$area = NGABS_DB::normalize_area_name( $area );
 
 		$fee_kobo = null;
 

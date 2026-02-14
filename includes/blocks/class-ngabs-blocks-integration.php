@@ -15,7 +15,7 @@ class NGABS_Blocks_Integration implements IntegrationInterface {
 		wp_register_script(
 			'ngabs-blocks',
 			NGABS_PLUGIN_URL . 'assets/js/ngabs-blocks.js',
-			array( 'wp-data', 'wp-api-fetch' ),
+			array( 'wc-blocks-checkout', 'wp-data', 'wp-api-fetch' ),
 			NGABS_VERSION,
 			true
 		);

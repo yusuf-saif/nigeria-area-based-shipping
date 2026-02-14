@@ -77,7 +77,23 @@ class NGABS_DB {
 		return ( (int) $naira * 100 ) + (int) $dec;
 	}
 
-	public static function format_kobo_to_naira( $kobo ) {
+	
+/**
+ * Normalize Area names for consistent storage/lookups.
+ *
+ * - Trim leading/trailing whitespace
+ * - Collapse multiple whitespace into a single space
+ *
+ * We keep the original casing for display, but normalization reduces mismatches between
+ * values entered in admin/import vs. values selected on checkout.
+ */
+public static function normalize_area_name( $name ) {
+	$name = trim( (string) $name );
+	$name = preg_replace( '/\s+/', ' ', $name );
+	return $name;
+}
+
+public static function format_kobo_to_naira( $kobo ) {
 		$kobo  = (int) $kobo;
 		$naira = (int) floor( $kobo / 100 );
 		$dec   = abs( $kobo % 100 );
@@ -193,37 +209,71 @@ class NGABS_DB {
 	}
 
 	public static function get_area_fee_kobo( $state_code, $area_name ) {
-		global $wpdb;
-		self::init();
+	global $wpdb;
+	self::init();
 
-		$state_code = strtoupper( (string) $state_code );
-		$area_name  = (string) $area_name;
+	$state_code = strtoupper( (string) $state_code );
+	$area_name  = self::normalize_area_name( $area_name );
 
-		$ver = self::cache_ver();
-		$key = 'area_fee_' . $ver . '_' . md5( $state_code . '|' . $area_name );
-		$cached = wp_cache_get( $key, 'ngabs' );
-		if ( $cached !== false ) return $cached;
+	$ver    = self::cache_ver();
+	$key    = 'area_fee_' . $ver . '_' . md5( $state_code . '|' . $area_name );
+	$cached = wp_cache_get( $key, 'ngabs' );
+	if ( $cached !== false ) {
+		return $cached;
+	}
 
+	$fee = null;
+
+	// 1) Exact match (fast path).
+	$row = $wpdb->get_row(
+		$wpdb->prepare(
+			"SELECT area_fee_kobo FROM " . self::$areas_table . " WHERE state_code=%s AND area_name=%s",
+			$state_code,
+			$area_name
+		),
+		ARRAY_A
+	);
+
+	// 2) Fallback: TRIM() match (handles datasets with stray leading/trailing spaces).
+	if ( ! $row ) {
 		$row = $wpdb->get_row(
 			$wpdb->prepare(
-				"SELECT area_fee_kobo FROM " . self::$areas_table . " WHERE state_code=%s AND area_name=%s",
+				"SELECT area_fee_kobo FROM " . self::$areas_table . " WHERE state_code=%s AND TRIM(area_name)=%s LIMIT 1",
 				$state_code,
 				$area_name
 			),
 			ARRAY_A
 		);
-
-		$fee = $row ? ( $row['area_fee_kobo'] === null ? null : (int) $row['area_fee_kobo'] ) : null;
-		wp_cache_set( $key, $fee, 'ngabs', 300 );
-		return $fee;
 	}
+
+	// 3) Final fallback: match ignoring spaces/case.
+	if ( ! $row && $area_name !== '' ) {
+		$norm = strtolower( preg_replace( '/\s+/', '', $area_name ) );
+		$row  = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT area_fee_kobo FROM " . self::$areas_table . " WHERE state_code=%s AND REPLACE(LOWER(area_name), ' ', '')=%s LIMIT 1",
+				$state_code,
+				$norm
+			),
+			ARRAY_A
+		);
+	}
+
+	if ( $row ) {
+		$fee = ( $row['area_fee_kobo'] === null ) ? null : (int) $row['area_fee_kobo'];
+	}
+
+	wp_cache_set( $key, $fee, 'ngabs', 300 );
+	return $fee;
+}
+
 
 	public static function upsert_area( $state_code, $area_name, $fee_kobo_nullable ) {
 		global $wpdb;
 		self::init();
 
 		$state_code = strtoupper( (string) $state_code );
-		$area_name  = trim( (string) $area_name );
+		$area_name  = self::normalize_area_name( $area_name );
 		if ( $area_name === '' ) return new WP_Error( 'ngabs_invalid_area', __( 'Area name is required.', 'ngabs' ) );
 
 		$fee_val = ( $fee_kobo_nullable === null ) ? null : (int) $fee_kobo_nullable;
@@ -287,7 +337,7 @@ class NGABS_DB {
 
 		$id = (int) $id;
 		$state_code = strtoupper( (string) $state_code );
-		$area_name  = trim( (string) $area_name );
+		$area_name  = self::normalize_area_name( $area_name );
 		if ( $id <= 0 || $area_name === '' ) return new WP_Error( 'ngabs_invalid_area', __( 'Valid Area ID and name are required.', 'ngabs' ) );
 
 		$exists = $wpdb->get_var(

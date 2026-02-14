@@ -2,15 +2,50 @@
 Contributors: ngabs
 Tags: woocommerce, shipping, nigeria, areas, states
 Requires at least: 6.0
-Tested up to: 6.5
+Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 1.4.0
+Stable tag: 1.6.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
 Nigeria-only WooCommerce shipping method with State + Area pricing, custom tables, admin UI, CSV import, setup wizard, and checkout recalculation.
 
 == Changelog ==
+= 1.6.0 =
+* Fix: Admin menu now appears under WooCommerce → Nigeria Shipping.
+* Fix: Checkout Block integration now registers the Area field on woocommerce_blocks_loaded for reliable field rendering.
+* Fix: More robust Area fee lookup (normalizes whitespace/case; fallback matching) so Area-specific fees override State defaults consistently.
+* Fix: CSV importer normalizes Area names to avoid mismatches.
+* UX: Hide WooCommerce Shipping Debug Mode banner on the frontend.
+* Code: General cleanup and additional inline comments.
+
+= 1.5.3 =
+* Fixed Blocks Additional Checkout Field registration: select options now use required value/label format.
+
+= 1.5.2 =
+* Fixed Checkout Block notice: select field now registers with a placeholder option.
+* Fixed pricing: include selected Area in WooCommerce shipping package hash so rates recalculate when Area changes (Classic + Block).
+
+= 1.5.1 =
+* Blocks JS: prevent repeated cart updates; apply options to late-mounted fields safely.
+* Blocks script: declare wc-blocks-checkout dependency to avoid console warnings.
+
+= 1.5.0 =
+* Fixed fatal parse error in Checkout Blocks integration.
+* Rebuilt Checkout Block updating to use wc.blocksCheckout.extensionCartUpdate() so Area selection updates shipping totals instantly.
+* Fixed area fee override by trimming and consistent session handling.
+* Delayed plugin initialization to woocommerce_init to avoid WP 6.7+ early i18n notices.
+
+= 1.4.3 =
+* Fixed Blocks Area fee pricing: support multiple setExtensionData signatures and payload shapes, ensuring selected Area reaches the server.
+
+= 1.4.2 =
+* Fixed Blocks Area mismatch: script now targets ngabs/area field and sends selected area to Store API.
+* Store API callback now stores area consistently in session (ngabs_area + shipping/billing aliases).
+
+= 1.4.1 =
+* Fixed Blocks notice: prevent registering ngabs/area field twice.
+
 = 1.4.0 =
 * Fixed Blocks field registration: use valid location "address" (shows in billing + shipping).
 * Consolidated Blocks field to single id ngabs/area.

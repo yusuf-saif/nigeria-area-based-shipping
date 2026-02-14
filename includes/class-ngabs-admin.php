@@ -29,7 +29,7 @@ class NGABS_Admin {
 
 	public static function register_menu() {
 		add_submenu_page(
-			'ngabs',
+			'woocommerce',
 			__( 'Nigeria Shipping', 'ngabs' ),
 			__( 'Nigeria Shipping', 'ngabs' ),
 			'manage_woocommerce',

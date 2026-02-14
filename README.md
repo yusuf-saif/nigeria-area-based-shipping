@@ -1,6 +1,6 @@
 # Nigeria Area-Based Shipping (WooCommerce)
 
-Version: **1.3.7**
+Version: **1.5.2**
 
 ## Features
 - Nigeria-only shipping method (WooCommerce Shipping Method API)

@@ -36,8 +36,9 @@ class NGABS_Importer {
 			$rownum++;
 
 			$state_raw = isset( $row[ $idx_state ] ) ? trim( (string) $row[ $idx_state ] ) : '';
-			$area_raw  = isset( $row[ $idx_area ] ) ? trim( (string) $row[ $idx_area ] ) : '';
-			$price_raw = isset( $row[ $idx_price ] ) ? trim( (string) $row[ $idx_price ] ) : '';
+$area_raw  = isset( $row[ $idx_area ] ) ? trim( (string) $row[ $idx_area ] ) : '';
+$area_raw  = NGABS_DB::normalize_area_name( $area_raw );
+$price_raw = isset( $row[ $idx_price ] ) ? trim( (string) $row[ $idx_price ] ) : '';
 
 			if ( $state_raw === '' && $area_raw === '' && $price_raw === '' ) continue;
 
@@ -67,7 +68,7 @@ class NGABS_Importer {
 
 			$existing = false;
 			foreach ( NGABS_DB::list_areas( $state_code ) as $a ) {
-				if ( (string) $a['area_name'] === (string) $area_raw ) { $existing = true; break; }
+				if ( NGABS_DB::normalize_area_name( (string) $a['area_name'] ) === $area_raw ) { $existing = true; break; }
 			}
 
 			$res = NGABS_DB::upsert_area( $state_code, $area_raw, $fee_kobo );

@@ -39,7 +39,7 @@ class NGABS_Checkout {
 	$field = array(
 		'type'     => 'select',
 		'label'    => __( 'Area', 'ngabs' ),
-		'required' => false,
+		'required' => false, // Required conditionally via validation/JS.
 		'class'    => array( 'form-row-wide' ),
 		'priority' => 85,
 		'options'  => array( '' => __( 'Select an area…', 'ngabs' ) ),
@@ -60,12 +60,12 @@ class NGABS_Checkout {
 	$billing_country  = isset( $data['billing_country'] ) ? strtoupper( sanitize_text_field( $data['billing_country'] ) ) : '';
 	$billing_state_in = isset( $data['billing_state'] ) ? (string) $data['billing_state'] : '';
 	$billing_state    = NGABS_States::normalize_to_code( $billing_state_in ) ?: '';
-	$billing_area     = isset( $data['billing_ngabs_area'] ) ? sanitize_text_field( (string) $data['billing_ngabs_area'] ) : '';
+	$billing_area     = isset( $data['billing_ngabs_area'] ) ? NGABS_DB::normalize_area_name( sanitize_text_field( (string) $data['billing_ngabs_area'] ) ) : '';
 
 	$shipping_country  = isset( $data['shipping_country'] ) ? strtoupper( sanitize_text_field( $data['shipping_country'] ) ) : '';
 	$shipping_state_in = isset( $data['shipping_state'] ) ? (string) $data['shipping_state'] : '';
 	$shipping_state    = NGABS_States::normalize_to_code( $shipping_state_in ) ?: '';
-	$shipping_area     = isset( $data['shipping_ngabs_area'] ) ? sanitize_text_field( (string) $data['shipping_ngabs_area'] ) : '';
+	$shipping_area     = isset( $data['shipping_ngabs_area'] ) ? NGABS_DB::normalize_area_name( sanitize_text_field( (string) $data['shipping_ngabs_area'] ) ) : '';
 
 	$ship_to_diff = ! empty( $data['ship_to_different_address'] );
 
@@ -147,7 +147,8 @@ class NGABS_Checkout {
 		check_ajax_referer( 'ngabs_checkout_nonce', 'nonce' );
 
 		$country = isset( $_POST['country'] ) ? strtoupper( wc_clean( wp_unslash( $_POST['country'] ) ) ) : '';
-		$state   = isset( $_POST['state'] ) ? strtoupper( wc_clean( wp_unslash( $_POST['state'] ) ) ) : '';
+		$state_in = isset( $_POST['state'] ) ? wc_clean( wp_unslash( $_POST['state'] ) ) : '';
+		$state    = NGABS_States::normalize_to_code( $state_in ) ?: '';
 
 		if ( $country !== 'NG' || $state === '' ) {
 			wp_send_json_success( array( 'has_areas' => false, 'options' => array() ) );
